@@ -1,0 +1,37 @@
+ Portable Virtual Machine Repository utility
+ ===========================================
+
+This application has been written to allow using your hard-drives/flash-drives
+as the repository of VM images. The application has been written in C programming
+language and it's using libvirt, libxml2, gtk-vnc and also the blkid as it
+supports many functions, like mounting a new block devices (when running as
+root) and checking for the repository file (pvr.xml) in the root directory
+the user is being asked for the VM to run using the external script and then
+the domain is being created containing all the data on the drive itself. The
+chooser dialog should be implemented directly as the part of utility using
+GTK libs.
+
+Terminology
+-----------
+
+This app should be referred to as "Portable Virtual Repository", or "Portable
+Virtual Machine Repository" respectively. Usage of abbreviated name of "PVR"
+is also acceptable.
+
+Pre-requisite software
+----------------------
+
+Where versions are noted below these are the versions tested to definitely
+work. For some of them you may be able to run with earlier releases, so
+please report any success to the mailing lists
+
+ libxml2
+ libvirt
+ blkid
+ gtk-vnc
+
+Copyright /  License
+--------------------
+
+All the application code is covered under the GPL licence.
+
