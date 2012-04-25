@@ -1,0 +1,12 @@
+<pvr version="0.1">
+	<paths>
+		<configs>config-files</configs>
+		<images>disks</images>
+		<isos>isos</isos>
+	</paths>
+	<domains type="kvm" count="1">
+		<names arch="i686" count="1">
+			<name>SystemRescueCD</name>
+		</names>
+	</domains>
+</pvr>
