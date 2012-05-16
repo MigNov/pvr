@@ -68,8 +68,15 @@ char *xml_query_by_id(char *xmlFile, char *xPath, int id) {
 	}
 #endif
 
-	if (num > id)
-		data = strdup( (char *)xmlNodeListGetString(doc, (nodeset->nodeTab[id])->xmlChildrenNode, 1) );
+	DPRINTF("Current num value is %d, id value is %d\n", num, id);
+	if (num > id) {
+		char *tmp = (char *)xmlNodeListGetString(doc, (nodeset->nodeTab[id])->xmlChildrenNode, 1);
+
+		data = strdup(tmp);
+		DPRINTF("Got data element of '%s'\n", tmp);
+	}
+	else
+		DPRINTF("Trying to access element out of bounds (id > num)\n");
 
 	xmlXPathFreeObject(op);
 

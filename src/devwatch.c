@@ -37,6 +37,7 @@ int handle_vm_xml(char *xmlFile, char *path, char *uri)
 	xml = replace(xml, "%IMAGE_DIR%", images);
 	xml = replace(xml, "%ISO_DIR%", isos);
 
+	validate_and_strip_xml(xml);
 	ret = startDomain(xml, uri);
 	free(xml);
 	return ret;
@@ -63,6 +64,8 @@ int handle_pvr_xml(char *xmlFile, char *path)
 	/* For version sanity check */
 	tmp = xml_query(xml, "//pvr/@version");
 	if (tmp == NULL) {
+		DPRINTF("Cannot find node //pvr/@version in the XML file\n");
+		DPRINTF("XML File is: %s\n", xml);
 		ret = -EINVAL;
 		goto cleanup;
 	}
@@ -70,7 +73,8 @@ int handle_pvr_xml(char *xmlFile, char *path)
 	ver = get_version(tmp);
 	free(tmp);
 
-	if (ver > get_version(VERSION)) {
+	if (ver > get_version(PVR_VERSION)) {
+		DPRINTF("Unsupported version\n");
 		ret = -ENOTSUP;
 		goto cleanup;
 	}
@@ -115,16 +119,48 @@ int handle_pvr_xml(char *xmlFile, char *path)
 			strcat(names, tmp);
 			if (i < cnt - 1)
 				strcat(names, " ");
-		free(tmp);
+			free(tmp);
 		}
 	}
 
-	snprintf(cmd, sizeof(cmd), "./asker.sh '%s'", names);
-	DPRINTF("Calling \"%s\"\n", cmd);
+	if (show_selector(NULL, NULL, 0) == -1)
+		snprintf(cmd, sizeof(cmd), "./asker.sh '%s'", names);
+	else {
+#ifdef USE_HACK
+		char path[1024] = { 0 };
+		char buf[2048] = { 0 };
 
+		snprintf(path, sizeof(path), "/proc/%d/exe", getpid());
+		readlink(path, buf, sizeof(buf));
+		snprintf(cmd, sizeof(cmd), "%s -s \"%s\" -l console 2> /dev/null", buf, names);
+#else
+		int ret = -1;
+		char **items = (char **)malloc( (cnt + 1) * sizeof(char *)); 
+
+		items[0] = (char *)malloc( 64 * sizeof(char) );
+		snprintf(items[0], 64, "Exit without running any virtual machine");
+		for (i = 0; i < cnt; i++) {
+			if ((tmp = xml_query_by_id(xml, xp, i)) != NULL) {
+				items[i + 1] = strdup(tmp);
+				free(tmp);
+			}
+		}
+
+		ret = show_selector("Select virtual machine", items, cnt + 1);
+
+		for (i = 0; i < cnt + 1; i++)
+			free(items[i]);
+		free(items);
+		i = ret;
+#endif
+	}
+
+	DPRINTF("Running selector command (%s)\n", cmd);
 	/* Error code is being used to identify XML to be loaded */
 	i = WEXITSTATUS(system(cmd));
 	DPRINTF("Call error code is %d\n", i);
+
+	DPRINTF("Virtual machine selector error code is %d\n", i);
 	if (i == 0) {
 		ret = -EINVAL;
 		goto cleanup;
@@ -169,15 +205,17 @@ void handle_new_dev(char *dev, char *uri)
 
 			DPRINTF("%s not mounted. Trying to mount\n", dev);
 			fsType = getfstype(dev);
-			if (fsType == NULL)
+			if (fsType == NULL) {
+				DPRINTF("Unknown file system type\n");
 				return;
+			}
 			tmp = mount_dev(dev, fsType, &error);
 			if (error != 0)
 				DPRINTF("mount_dev() returned error code: %d\n", error);
 			if (tmp == NULL)
 				DPRINTF("Device doesn't appear to contain VM images\n");
 			else {
-				DPRINTF("Device appears to contain a VM images\n");
+				DPRINTF("Device appears to contain VM images\n");
 				snprintf(tmp2, 1024, "%s/%s", tmp, PVR_ROOT_FILE);
 				DPRINTF("PVR Root File: %s\n", tmp2);
 				DPRINTF("Path: %s\n", tmp);
@@ -259,7 +297,7 @@ void sig_handler(int sig) {
 
 int main(int argc, char *argv[])
 {
-	char *xmlFile, *logFile, *uri, *vnccl, *str;
+	char *xmlFile, *logFile, *uri, *vnccl, *str, *selector;
 	char logfile[1024], cwd[1024];
 	int fd, wd, ret, opt, fullscreen;
 
@@ -275,9 +313,12 @@ int main(int argc, char *argv[])
 	logFile = NULL;
 	uri     = NULL;
 	vnccl	= NULL;
+	selector= NULL;
+
+	g_allow_external_mount = 1;
 
 	#ifdef HAVE_LIBGTK_VNC_1_0
-	str = "l:x:u:v:fh";
+	str = "l:x:u:v:s:fh";
 	#else
 	str = "l:x:u:h";
 	#endif
@@ -300,13 +341,16 @@ int main(int argc, char *argv[])
 			case 'f':
 				fullscreen = 1;
 				break;
+			case 's':
+				selector = optarg;
+				break;
 			#endif
 			case 'h':
 			default: /* '?' */
 				fprintf(stderr, "Usage: %s [-x xmlFile] [-l logFile] [-u hypervisor-uri] %s\n",
 					argv[0],
 					#ifdef HAVE_LIBGTK_VNC_1_0
-					"[-v vncserver:port [-f]]"
+					"[-v vncserver:port [-f]] [-s \"name1 name2\"]"
 					#else
 					""
 					#endif
@@ -333,6 +377,31 @@ int main(int argc, char *argv[])
 	}
 
 	DPRINTF("Started with PID %d\n", getpid() );
+
+	if (selector != NULL) {
+		int ret = -1, cnt, i;
+		char **items = NULL;
+
+		tTokenizer t = tokenize_by(selector, " ");
+		cnt = t.numTokens;
+
+		items = (char **)malloc( (t.numTokens + 1) * sizeof(char *));
+		items[0] = (char *)malloc( 64 * sizeof(char) );
+		snprintf(items[0], 64, "Exit without running any virtual machine");
+		for (i = 0; i < t.numTokens; i++)
+			items[i + 1] = strdup(t.tokens[i]);
+
+		free_tokens(t);
+
+		ret = show_selector("Select virtual machine", items, cnt + 1);
+
+		for (i = 0; i < cnt + 1; i++)
+			free(items[i]);
+
+		free(items);
+
+		return ret;
+	}
 
 	if (vnccl != NULL) {
 		char *host = NULL;

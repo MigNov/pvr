@@ -1,7 +1,7 @@
 /*
- * GTK VNC Widget
+ * GTK VNC Handler for PVR
  *  
- * Copyright (C) 2006  Anthony Liguori <anthony@codemonkey.ws>
+ * Copyright (C) 2012  Michal Novotny <mignov@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,19 +33,14 @@ do {} while(0)
 #ifndef HAVE_LIBGTK_VNC_1_0
 int startVNCViewer(char *hostname, char *port, int fullscreen)
 {
-	/* Always return error of no connection available for case we don't have gtk-vnc support compiled */
-	return VNC_STATUS_NO_CONNECTION;
+	/* Always return error of not supported for case we don't have gtk-vnc support compiled */
+	return VNC_STATUS_UNSUPPORTED;
 }
 #else
 /* We have gtk-vnc support */
 #if WITH_LIBVIEW
 #include <libview/autoDrawer.h>
 #endif
-
-static const GOptionEntry options [] =
-{
-  { NULL, 0, 0, G_OPTION_ARG_NONE, NULL, NULL, 0 }
-};
 
 static GtkWidget *vnc, *window;
 static gboolean connected;
@@ -153,7 +148,6 @@ static void vnc_disconnected(GtkWidget *vncdisplay G_GNUC_UNUSED)
 	//window = NULL;
 	//vnc = NULL;
 	gtk_widget_hide(window);
-
 	gtk_main_quit();
 }
 
@@ -287,17 +281,14 @@ static gboolean window_state_event(GtkWidget *widget,
 
 int startVNCViewer(char *hostname, char *port, int fullscreen)
 {
-	GOptionContext *context;
-	GError *error = NULL;
 	GtkWidget *layout;
+
+	if ((hostname == NULL) || (port == NULL))
+		return VNC_STATUS_NO_CONNECTION;
 
 	DPRINTF("Starting VNC viewer for host %s and port %s\n", hostname, port);
 
-	context = g_option_context_new ("- VMRunner GTK-VNC client");
-	g_option_context_add_main_entries (context, options, NULL);
-	g_option_context_add_group (context, gtk_get_option_group (TRUE));
-	g_option_context_add_group (context, vnc_display_get_option_group ());
-	g_option_context_parse (context, 0, NULL, &error);
+	gtk_init(NULL, NULL);
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	vnc = vnc_display_new();
@@ -326,6 +317,7 @@ int startVNCViewer(char *hostname, char *port, int fullscreen)
 	vnc_display_set_keyboard_grab(VNC_DISPLAY(vnc), TRUE);
 	vnc_display_set_pointer_grab(VNC_DISPLAY(vnc), TRUE);
 
+	DPRINTF("All grabbing set\n");
 	if (!gtk_widget_is_composited(window)) {
 		vnc_display_set_scaling(VNC_DISPLAY(vnc), TRUE);
 	}
@@ -361,7 +353,14 @@ int startVNCViewer(char *hostname, char *port, int fullscreen)
 			   GTK_SIGNAL_FUNC(window_state_event), layout);
 #endif
 
+	DPRINTF("Running main GTK loop\n");
+
 	gtk_main();
+
+	DPRINTF("Doing all the iterations for pending events\n");
+
+	while (gtk_events_pending ())
+		gtk_main_iteration ();
 
 	DPRINTF("Done. Viewer has finished with code %d\n", retCode);
 	return retCode;

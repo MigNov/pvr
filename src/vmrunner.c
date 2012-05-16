@@ -141,6 +141,7 @@ int startDomain(char *xml, char *uri)
 	dp = virDomainCreateXML(cp, xml, 0);
 	if (dp == NULL) {
 		DPRINTF("virDomainCreateXML call failed\n");
+		DPRINTF("XML File data:\n%s\n", xml);
 		return -EINVAL;
 	}
 
@@ -172,7 +173,23 @@ int startDomain(char *xml, char *uri)
 
 	id = virDomainGetID(dp);
 	DPRINTF("Domain created with ID %d\n", id);
+#ifdef USE_HACK
+	if (startVNCViewer(NULL, NULL, 1) != VNC_STATUS_UNSUPPORTED) {
+		char path[1024] = { 0 };
+		char buf[2048] = { 0 };
+		char cmd[4096] = { 0 };
+
+		snprintf(path, sizeof(path), "/proc/%d/exe", getpid());
+		readlink(path, buf, sizeof(buf));
+		snprintf(cmd, sizeof(cmd), "%s -v localhost:%s -f -l console 2> /dev/null", buf, port);
+		DPRINTF("About to run '%s'\n", cmd);
+		res = WEXITSTATUS(system(cmd));
+	}
+	else
+		res = VNC_STATUS_NO_CONNECTION;
+#else
 	res = startVNCViewer("localhost", port, 1);
+#endif
 	if (((virDomainIsActive(dp)) && (!domainIsOff))
 		|| (res != VNC_STATUS_SHUTDOWN)) {
 		DPRINTF("Domain is active, destroying...\n");

@@ -20,21 +20,32 @@ char *getfstype(char *dev)
 	char devPath[256];
 	char *ret = NULL;
 
-	if (blkid_get_cache(&cache, NULL) != 0)
+	if (blkid_get_cache(&cache, NULL) != 0) {
+		DPRINTF("Cannot get blkid cache\n");
 		return NULL;
+	}
 
 	snprintf(devPath, 256, "%s/%s", DEV_PATH, dev);
 	bdev = blkid_get_dev(cache, devPath, BLKID_DEV_NORMAL);
-	if (!bdev)
+	if (!bdev) {
+		DPRINTF("Cannot get block device information for blkid\n");
 		return NULL;
+	}
 
 	iter = blkid_tag_iterate_begin(bdev);
 	while (blkid_tag_next(iter, &type, &value) == 0) {
 		DPRINTF("%s: Type is '%s', value is '%s'\n", dev, type, value);
 		if (strcmp(type, "TYPE") == 0) {
-			ret = (char *) malloc( (strlen(value) + 1) * sizeof(char) );
-			memset(ret, 0, (strlen(value) + 1) * sizeof(char));
+			/* For NTFS we need to override to NTFS-3G as we need read-write support */
+			int ext = 1;
+			if (strcmp(value, "ntfs") == 0)
+				ext += 3;
+			ret = (char *) malloc( (strlen(value) + ext) * sizeof(char) );
+			memset(ret, 0, (strlen(value) + ext) * sizeof(char));
 			strcpy(ret, value);
+
+			if (strcmp(value, "ntfs") == 0)
+				strcat(ret, "-3g");
 			break;
 		}
 	}
@@ -47,6 +58,7 @@ char *getfstype(char *dev)
 char *getfstype(char *dev)
 {
 	/* We can't get the fstype as we don't have libblkid compiled */
+	DPRINTF("No blkid support compiled\n");
 	return NULL;
 }
 #endif
@@ -71,6 +83,18 @@ int unmount_dev(char *dev)
 	return res;
 }
 
+int run_mount_command(char *dev, char *dir)
+{
+	int i;
+	char cmd[1024] = { 0 };
+
+	snprintf(cmd, sizeof(cmd), "mount %s %s", dev, dir);
+	i = WEXITSTATUS(system(cmd));
+
+	DPRINTF("Command '%s' error code is %d\n", cmd, i);
+	return i;
+}
+
 char *mount_dev(char *dev, char *fstype, int *error)
 {
 	int ret = 0;
@@ -85,12 +109,23 @@ char *mount_dev(char *dev, char *fstype, int *error)
 	memset(tmp, 0, sizeof(512 * sizeof(char)) );
 	snprintf(tmp, 512, "%s/%s", DEV_PATH, dev);
 	DPRINTF("Mounting %s to %s\n", tmp, tempdir);
+
+	/* This sometimes fails, like for mounting NTFS file system */
 	if (mount(tmp, tempdir, fstype, MS_MGC_VAL, NULL) == -1) {
 		int err = errno;
-		DPRINTF("An error occured while mounting: %s\n", strerror(err));
-		if (error != NULL)
-			*error = -err;
-		return NULL;
+		int override = 0;
+
+		if (g_allow_external_mount) {
+			if (run_mount_command(tmp, tempdir) == 0)
+				override = 1;
+		}
+
+		if (!override) {
+			DPRINTF("An error occured while mounting: %s\n", strerror(err));
+			if (error != NULL)
+				*error = -err;
+			return NULL;
+		}
 	}
 
 	tmp = (char *)malloc( 512 * sizeof(char) );

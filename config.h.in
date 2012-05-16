@@ -1,5 +1,11 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define to 1 if you have the `blkid' library (-lblkid). */
+#undef HAVE_LIBBLKID
+
+/* Define to 1 if you have the `gtk-vnc-1.0' library (-lgtk-vnc-1.0). */
+#undef HAVE_LIBGTK_VNC_1_0
+
 /* Define to 1 if you have the `virt' library (-lvirt). */
 #undef HAVE_LIBVIRT
 

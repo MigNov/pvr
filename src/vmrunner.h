@@ -30,12 +30,15 @@
 #include "vncdisplay.h"
 #endif
 
-#define VERSION				"0.1"
+#define PVR_VERSION			"0.1"
 #define DEV_PATH			"/dev"
 #define PVR_ROOT_FILE			"pvr.xml"
 #define VNC_STATUS_OK			0
 #define VNC_STATUS_SHUTDOWN		1
 #define VNC_STATUS_NO_CONNECTION	2
+#define VNC_STATUS_UNSUPPORTED		3
+
+#define USE_HACK
 
 virConnectPtr cp;
 char *defemu;
@@ -49,6 +52,7 @@ char *isos;
 int isDone;
 int domainIsOff;
 int lastErrorCode;
+int g_allow_external_mount;
 
 char	*get_datetime(void);
 char	*replace(char *str, char *what, char *with);
@@ -65,6 +69,8 @@ char	*mount_dev(char *dev, char *fstype, int *error);
 char	*getfstype(char *dev);
 int	check_for_vm(char *xmlFile);
 int	startVNCViewer(char *hostname, char *port, int fullscreen);
+int	show_selector(char *title, char **items, int num_items);
+void	validate_and_strip_xml(char *str);
 
 typedef struct tTokenizer {
         char **tokens;

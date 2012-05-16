@@ -128,6 +128,8 @@ char *replace(char *str, char *what, char *with)
 
 	size = strlen(str) - strlen(what) + strlen(with);
 	new = (char *)malloc( size * sizeof(char) );
+	memset(new, 0, size * sizeof(char));
+
 	DPRINTF("New string size allocated to %d bytes\n", size);
 	old = strdup(str);
 	DPRINTF("Duplicated string str at %p to old at %p\n", str, old);
@@ -148,6 +150,20 @@ char *replace(char *str, char *what, char *with)
 	DPRINTF("Old freed\n");
 #endif
 	return new;
+}
+
+void validate_and_strip_xml(char *str)
+{
+	int i, len;
+
+	for (i = strlen(str); i > 0; i--)
+		if (str[i] == '>')
+			break;
+
+	len = i + 1;
+	str[len] = 0;
+
+	str = realloc( str, len * sizeof(char) );
 }
 
 /*
